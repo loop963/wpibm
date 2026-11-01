@@ -34,6 +34,16 @@
         <span>L/100km</span>
       </div>
       <div class="chart-card" id="chart"></div>
+
+      <div class="section-head" style="margin-top:18px">
+        <h2>油费支出月度统计</h2>
+        <span class="year-pick">
+          <select class="year-select" id="cost-year" aria-label="选择年份"></select>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </div>
+      <div class="chart-card" id="cost-chart"></div>
+
       <div class="section-head" style="margin-top:14px" id="home-more">
         <button class="link accent" id="to-records">查看全部记录 →</button>
       </div>
@@ -130,8 +140,8 @@
           <div class="field">
             <label>油号</label>
             <select name="grade">
+              <option selected>95#</option>
               <option>92#</option>
-              <option>95#</option>
               <option>98#</option>
               <option>0#柴油</option>
             </select>

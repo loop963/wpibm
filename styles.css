@@ -149,6 +149,12 @@ button, input, select, textarea {
   line-height: 0.92;
   font-variant-numeric: tabular-nums;
 }
+.hero-approx {
+  font-size: 0.45em;
+  font-weight: 600;
+  margin-right: 2px;
+  opacity: 0.8;
+}
 .hero-unit {
   margin-bottom: 8px;
   font-size: 16px;
@@ -250,6 +256,44 @@ button, input, select, textarea {
   color: var(--muted);
   font-size: 13px;
 }
+.chart-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 0 10px 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-foot b {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.year-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+  background: rgba(120, 120, 128, 0.12);
+  padding: 4px 7px 4px 9px;
+  border-radius: 9px;
+}
+.year-pick svg { display: block; }
+.year-select {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
 
 .records {
   background: var(--card);
@@ -301,12 +345,24 @@ button, input, select, textarea {
   margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.badge.warn {
+  background: rgba(120, 120, 128, 0.16);
+  color: var(--muted);
 }
 .rec-cons {
   text-align: right;
   font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.rec-cons.est {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--muted);
 }
 .rec-cons small {
   display: block;
@@ -352,6 +408,7 @@ button, input, select, textarea {
   border-bottom: 1px solid var(--line);
 }
 .row:last-child { border-bottom: 0; }
+.row.muted .left, .row.muted .right { color: var(--muted); }
 .row .left {
   display: flex;
   align-items: center;

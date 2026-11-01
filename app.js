@@ -1,6 +1,8 @@
 const STORAGE_KEY = "fuel-record-v1";
 // 首次打开时是否写入示例数据。false = 空表启动（正式发布用）。
 const SEED_ON_FIRST_RUN = false;
+// 新增记录时的默认油号
+const DEFAULT_GRADE = "95#";
 
 const ICONS = {
   drop: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3s7 7.2 7 11.2A7 7 0 1 1 5 14.2C5 10.2 12 3 12 3Z" stroke="currentColor" stroke-width="1.8"/></svg>`,
@@ -109,7 +111,7 @@ function withStats() {
 
     if (baseOdo == null) {
       baseOdo = r.odometer;
-      out.push({ ...r, distance: 0, consumption: null, span: 0, tankLiters: 0, tankCost: 0 });
+      out.push({ ...r, distance: 0, consumption: null, span: 0, tankLiters: 0, tankCost: 0, interim: null });
       continue;
     }
 
@@ -127,7 +129,9 @@ function withStats() {
       pending = 0;
       pendingCost = 0;
     }
-    out.push({ ...r, distance, consumption, span, tankLiters, tankCost });
+    // 未加满时不代表没有数据：给出“自上次加满以来”的累计油耗作参考
+    const interim = consumption == null && span > 0 && pending > 0 ? round2((pending / span) * 100) : null;
+    out.push({ ...r, distance, consumption, span, tankLiters, tankCost, interim });
   }
   return out;
 }
@@ -255,6 +259,73 @@ function renderHome() {
   const more = document.getElementById("home-more");
   if (more) more.hidden = !s.items.length;
   renderChart(s.trips);
+  renderCostChart();
+}
+
+/* ---------------- 首页：月度油费支出 ---------------- */
+
+let costYear = null; // 选中的年份，null 表示还没选过
+
+function yearOptions() {
+  const years = new Set();
+  state.records.forEach((r) => {
+    const d = parseTime(r.time);
+    if (!Number.isNaN(d.date.getTime())) years.add(d.y);
+  });
+  years.add(new Date().getFullYear());
+  return [...years].sort((a, b) => b - a);
+}
+
+function renderCostChart() {
+  const sel = document.getElementById("cost-year");
+  const years = yearOptions();
+  if (costYear == null || !years.includes(costYear)) {
+    const thisYear = new Date().getFullYear();
+    costYear = years.includes(thisYear) ? thisYear : years[0];
+  }
+  sel.innerHTML = years.map((y) => `<option value="${y}">${y} 年</option>`).join("");
+  sel.value = String(costYear);
+
+  const el = document.getElementById("cost-chart");
+  const monthly = new Array(12).fill(0);
+  state.records.forEach((r) => {
+    const d = parseTime(r.time);
+    if (d.y === costYear) monthly[d.m - 1] += r.cost;
+  });
+
+  const total = monthly.reduce((a, b) => a + b, 0);
+  if (!total) {
+    el.innerHTML = `<div class="chart-empty">${costYear} 年还没有加油记录</div>`;
+    return;
+  }
+  const activeMonths = monthly.filter((v) => v > 0).length;
+
+  const w = 390, h = 196, p = { l: 10, r: 10, t: 30, b: 28 };
+  const innerW = w - p.l - p.r;
+  const innerH = h - p.t - p.b;
+  const slot = innerW / 12;
+  const bw = Math.min(18, slot * 0.56);
+  const maxV = Math.max(...monthly);
+  const base = p.t + innerH;
+  const accent = cssVar("--accent", "#007aff");
+  const muted = cssVar("--muted", "#8e8e93");
+
+  const bars = monthly.map((v, i) => {
+    const cx = p.l + slot * i + slot / 2;
+    const bh = v > 0 ? Math.max(3, (v / maxV) * innerH) : 0;
+    const bar = bh
+      ? `<rect x="${cx - bw / 2}" y="${base - bh}" width="${bw}" height="${bh}" rx="${Math.min(5, bw / 2)}" fill="${accent}" fill-opacity="${v === maxV ? "1" : ".34"}"/>`
+      : `<rect x="${cx - bw / 2}" y="${base - 3}" width="${bw}" height="3" rx="1.5" fill="${muted}" fill-opacity=".16"/>`;
+    const amount = v > 0 ? `<text x="${cx}" y="${base - bh - 5}" text-anchor="middle" fill="${muted}" font-size="9">${Math.round(v)}</text>` : "";
+    const label = `<text x="${cx}" y="${h - 8}" text-anchor="middle" fill="${muted}" font-size="10">${i + 1}</text>`;
+    return bar + amount + label;
+  }).join("");
+
+  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${costYear} 年每月油费支出">
+      <line x1="${p.l}" y1="${base}" x2="${w - p.r}" y2="${base}" stroke="${muted}" stroke-opacity=".28" stroke-width="1"/>
+      ${bars}
+    </svg>
+    <div class="chart-foot"><span>${costYear} 年合计 <b>${money(Math.round(total))}</b></span><span>${activeMonths} 个月有记录 · 月均 ${money(Math.round(total / activeMonths))}</span></div>`;
 }
 
 function renderChart(trips) {
@@ -310,15 +381,18 @@ function renderRecords() {
   const newest = [...s.items].reverse();
   box.innerHTML = newest.map((r) => {
     const d = parseTime(r.time);
-    const dist = r.consumption == null
-      ? (r.distance > 0 ? `+${fmtNum(r.distance)}km · 未加满` : "首次")
-      : `+${fmtNum(r.distance)}km`;
-    const cons = r.consumption == null ? "—" : r.consumption.toFixed(2);
+    const dist = r.distance > 0 ? ` · +${fmtNum(r.distance)}km` : " · 首次";
+    // 未加满的记录不给“—”，显示自上次加满以来的累计值（带 ≈ 表示参考值）
+    const isEst = r.consumption == null && r.interim != null;
+    const consText = r.consumption != null
+      ? r.consumption.toFixed(2)
+      : isEst ? `≈${r.interim.toFixed(2)}` : "—";
+    const fullTag = r.full ? "" : `<span class="badge warn">未加满</span>`;
     return `<button class="record" data-id="${r.id}">
       <div class="date-col"><div class="y">${d.y}</div><div class="d">${pad(d.day)}</div><div class="m">${d.m}月</div></div>
-      <div class="rec-main"><strong>${money(r.cost)}</strong><span class="badge">${r.grade}</span>
-        <p>${fmtNum(r.odometer)}km · ${r.liters.toFixed(2)}L · ${dist}</p></div>
-      <div class="rec-cons">${cons}<small>L/100km</small></div>
+      <div class="rec-main"><strong>${money(r.cost)}</strong><span class="badge">${r.grade}</span>${fullTag}
+        <p>${fmtNum(r.odometer)}km · ${r.liters.toFixed(2)}L${dist}</p></div>
+      <div class="rec-cons${isEst ? " est" : ""}">${consText}<small>${r.consumption == null && r.interim == null ? (r.distance > 0 ? "L/100km" : "首次") : "L/100km"}</small></div>
       <div class="chev">${ICONS.chev}</div>
     </button>`;
   }).join("");
@@ -333,10 +407,11 @@ function openDetail(id) {
   const r = items.find((x) => x.id === id);
   if (!r) return;
   const d = parseTime(r.time);
+  const heroVal = r.consumption != null ? r.consumption.toFixed(2) : r.interim != null ? `<span class="hero-approx">≈</span>${r.interim.toFixed(2)}` : "--";
   document.getElementById("detail-hero").innerHTML = `
-    <div class="hero-label">${ICONS.drop} 本次油耗</div>
+    <div class="hero-label">${ICONS.drop} 本次油耗${r.consumption == null && r.interim != null ? "（未加满，参考值）" : ""}</div>
     <div class="hero-main">
-      <div class="hero-num">${r.consumption == null ? "--" : r.consumption.toFixed(2)}</div>
+      <div class="hero-num">${heroVal}</div>
       <div class="hero-unit">L/100km</div>
     </div>
         <div class="hero-foot"><span style="color:var(--hero-muted);font-size:13px">${d.y}年${d.m}月${d.day}日 周${d.w} · ${d.hm}</span></div>`;
@@ -345,7 +420,11 @@ function openDetail(id) {
       ${row(ICONS.clock, "加油时间", `${d.m}月${d.day}日 ${d.hm}`)}
       ${row(ICONS.dash, "仪表盘里程", `${fmtNum(r.odometer)} km`)}
       ${row(ICONS.route, "距上次行驶", r.distance ? `${fmtNum(r.distance)} km` : "首次")}
-      ${row(ICONS.drop, "单次油耗", r.consumption == null ? (r.distance > 0 ? "未加满，下次加满后计算" : "首次加油，无油耗") : `${r.consumption.toFixed(2)} L/100km`, true)}
+      ${row(ICONS.drop, "单次油耗", r.consumption != null
+        ? `${r.consumption.toFixed(2)} L/100km`
+        : r.interim != null
+          ? `≈${r.interim.toFixed(2)} L/100km（未满）`
+          : (r.distance > 0 ? "未加满，下次加满后计算" : "首次加油，无油耗"), true)}
     </div>
     <div class="group">
       ${row(ICONS.yen, "实际花费", money(r.cost))}
@@ -387,7 +466,7 @@ function openForm(id = null) {
   form.cost.value = rec ? rec.cost : "";
   form.price.value = rec ? rec.price : "";
   form.liters.value = rec ? rec.liters : "";
-  form.grade.value = rec ? rec.grade : "92#";
+  form.grade.value = rec ? rec.grade : DEFAULT_GRADE;
   form.station.value = rec ? rec.station : "";
   setToggle(form.querySelector("[data-toggle=full]"), rec ? rec.full : true);
   lastEdited = "cost";
@@ -645,7 +724,7 @@ function rowsToRecords(rows) {
       cost: round2(cost),
       price: round2(price),
       liters: round2(liters),
-      grade: text(row, col.grade) || "92#",
+      grade: text(row, col.grade) || DEFAULT_GRADE,
       full: /^(是|true|1|y|yes|加满)$/i.test(text(row, col.full)),
       station: text(row, col.station),
     };
@@ -964,10 +1043,11 @@ function renderStats() {
       </div>
     </div>`;
 
+  const totalAllCost = items.reduce((s, r) => s + r.cost, 0);
   document.getElementById("stats-grid").innerHTML = `
+    <article class="stat-card"><div class="label">${ICONS.yen} 加油花费</div><div class="value">${agg.cost ? money(Math.round(agg.cost)) : "--"}</div><div class="hint">${totalAllCost && statsScope !== "all" ? `累计 ${money(Math.round(totalAllCost))}` : (agg.cost ? `均价 ¥${agg.avgPrice ? agg.avgPrice.toFixed(2) : "--"}/L` : "还没有记录")}</div></article>
     <article class="stat-card"><div class="label">${ICONS.pump} 加油次数</div><div class="value">${agg.fills} <span class="unit">次</span></div><div class="hint">${agg.fills ? `${agg.trips} 次可算油耗` : "还没有记录"}</div></article>
     <article class="stat-card"><div class="label">${ICONS.drop} 累计油量</div><div class="value">${agg.liters ? agg.liters.toFixed(1) : "--"} <span class="unit">L</span></div><div class="hint">${agg.avgPrice ? `均价 ¥${agg.avgPrice.toFixed(2)}/L` : "—"}</div></article>
-    <article class="stat-card"><div class="label">${ICONS.route} 行驶里程</div><div class="value">${agg.distance ? fmtNum(Math.round(agg.distance)) : "--"} <span class="unit">km</span></div><div class="hint">${agg.trips ? `单次约 ${fmtNum(Math.round(agg.distance / agg.trips))}km` : "—"}</div></article>
     <article class="stat-card"><div class="label">${ICONS.loop} 每公里油费</div><div class="value">${agg.perKm ? "¥" + agg.perKm.toFixed(2) : "--"}</div><div class="hint">${agg.best ? `最低 ${agg.best.toFixed(2)} L/100km` : "—"}</div></article>`;
 
   const metricName = METRICS[statsMetric].name;
@@ -989,10 +1069,12 @@ function renderStats() {
     sub.textContent = `${rows.length} 次`;
     box.innerHTML = rows.map((r) => {
       const d = parseTime(r.time);
-      const cons = r.consumption == null ? "首次加油" : `${r.consumption.toFixed(2)} L/100km`;
+      const cons = r.consumption != null
+        ? `${r.consumption.toFixed(2)} L/100km`
+        : r.interim != null ? `≈${r.interim.toFixed(2)} L/100km` : "首次加油";
       return `<button class="row clickable" data-open-record="${r.id}">
         <span class="left"><span>${d.m}月${d.day}日 ${d.hm}<span class="sub">${r.liters.toFixed(1)}L · ${cons}</span></span></span>
-        <span class="right">${money(r.cost)}</span>
+        <span class="right accent">${money(r.cost)}</span>
       </button>`;
     }).join("");
   } else {
@@ -1003,15 +1085,35 @@ function renderStats() {
       if (!map.has(k)) map.set(k, []);
       map.get(k).push(r);
     });
-    const rows = [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+    let rows;
+    if (statsScope === "year") {
+      // 按年：1-12 月全部列出，没有记录的月份也显示 0
+      rows = Array.from({ length: 12 }, (_, i) => {
+        const m = i + 1;
+        const list = map.get(`${anchor.y}-${pad(m)}`) || [];
+        return { y: anchor.y, m, list };
+      });
+    } else {
+      rows = [...map.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([k, list]) => {
+          const [y, m] = k.split("-");
+          return { y: Number(y), m: Number(m), list };
+        });
+    }
+
     sub.textContent = `${rows.length} 个月`;
-    box.innerHTML = rows.map(([k, list]) => {
-      const [y, m] = k.split("-");
+    box.innerHTML = rows.map(({ y, m, list }) => {
+      const label = statsScope === "year" ? `${m} 月` : `${y} 年 ${m} 月`;
+      if (!list.length) {
+        return `<div class="row muted"><span class="left"><span>${label}<span class="sub">本月没有加油</span></span></span><span class="right">¥0</span></div>`;
+      }
       const a = aggregateSummary(list);
-      const label = statsScope === "year" ? `${Number(m)} 月` : `${y} 年 ${Number(m)} 月`;
+      const cons = a.avg == null ? (a.fills ? "未加满" : "—") : `${a.avg.toFixed(2)} L/100km`;
       return `<div class="row">
-        <span class="left"><span>${label}<span class="sub">${a.fills} 次 · ${fmtNum(Math.round(a.distance))}km · ${money(a.cost)}</span></span></span>
-        <span class="right${a.avg == null ? "" : " accent"}">${a.avg == null ? "—" : a.avg.toFixed(2)}<span class="unit-sm"> L/100km</span></span>
+        <span class="left"><span>${label}<span class="sub">${a.fills} 次 · ${fmtNum(Math.round(a.distance))}km · ${cons}</span></span></span>
+        <span class="right accent">${money(Math.round(a.cost))}</span>
       </div>`;
     }).join("");
   }
@@ -1149,6 +1251,10 @@ function boot() {
   wireFormCalc();
   wireTabs();
   wireStats();
+  document.getElementById("cost-year").addEventListener("change", (e) => {
+    costYear = Number(e.target.value);
+    renderCostChart();
+  });
   clampAnchor();
   renderAll();
   const initial = "view-" + (location.hash || "").replace("#", "");

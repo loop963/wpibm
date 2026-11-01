@@ -1,7 +1,7 @@
 /* 油耗记录 Service Worker
  * 修改 app.js / styles.css / index.html 后，把 VERSION 加 1，用户刷新一次即可拿到新版本。
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = `fuel-${VERSION}`;
 const SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./xlsx.js", "./manifest.json", "./icon.svg"];
 

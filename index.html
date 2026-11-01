@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dash-light" data-accent="blue">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f2f2f7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="description" content="燃油油耗记录：记录每次加油，自动计算单次与平均油耗，支持按年、按月统计。数据本地保存。" />
+  <meta name="apple-mobile-web-app-title" content="油耗记录" />
+  <title>油耗记录 · 油耗与花费统计</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23007aff'/%3E%3Cpath d='M32 12s16 16.5 16 25.5A16 16 0 1 1 16 37.5C16 28.5 32 12 32 12Z' fill='white'/%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <section class="view active" id="view-home">
+      <header class="topbar">
+        <div class="car-meta">
+          <div class="car-icon" id="car-icon"></div>
+          <div>
+            <h1 data-car-name>本田 CR-V</h1>
+            <p data-car-spec>240TURBO 两驱 · 沪A**K</p>
+          </div>
+        </div>
+        <button class="icon-btn" data-open-settings aria-label="设置"></button>
+      </header>
+      <div class="hero" id="hero"></div>
+      <div class="grid" id="stats"></div>
+      <div class="section-head">
+        <h2>油耗趋势</h2>
+        <span>L/100km</span>
+      </div>
+      <div class="chart-card" id="chart"></div>
+      <div class="section-head" style="margin-top:14px" id="home-more">
+        <button class="link accent" id="to-records">查看全部记录 →</button>
+      </div>
+    </section>
+
+    <section class="view" id="view-stats" hidden>
+      <header class="topbar">
+        <div class="car-meta">
+          <div class="car-icon"></div>
+          <div>
+            <h1>油耗统计</h1>
+            <p id="stats-range">—</p>
+          </div>
+        </div>
+        <button class="icon-btn" data-open-settings aria-label="设置"></button>
+      </header>
+
+      <div class="segmented" id="stats-scope">
+        <button type="button" data-scope="month" class="active">按月</button>
+        <button type="button" data-scope="year">按年</button>
+        <button type="button" data-scope="all">全部</button>
+      </div>
+
+      <div class="period-nav" id="period-nav">
+        <button type="button" class="period-btn" id="period-prev" aria-label="上一期"></button>
+        <div class="period-label" id="period-label">—</div>
+        <button type="button" class="period-btn" id="period-next" aria-label="下一期"></button>
+      </div>
+
+      <div class="hero" id="stats-hero"></div>
+      <div class="grid" id="stats-grid"></div>
+
+      <div class="section-head">
+        <h2 id="chart-title">趋势</h2>
+        <div class="metric-switch" id="stats-metric">
+          <button type="button" data-metric="consumption" class="active">油耗</button>
+          <button type="button" data-metric="cost">花费</button>
+          <button type="button" data-metric="liters">油量</button>
+        </div>
+      </div>
+      <div class="chart-card" id="stats-chart"></div>
+
+      <div class="section-head" style="margin-top:16px">
+        <h2>明细汇总</h2>
+        <span id="stats-sub"></span>
+      </div>
+      <div class="group" id="stats-breakdown"></div>
+    </section>
+
+    <section class="view" id="view-records" hidden>
+      <header class="topbar">
+        <div class="car-meta">
+          <div class="car-icon"></div>
+          <div>
+            <h1 data-car-name>本田 CR-V</h1>
+            <p data-car-spec>240TURBO 两驱 · 沪A**K</p>
+          </div>
+        </div>
+        <button class="icon-btn" data-open-settings aria-label="设置"></button>
+      </header>
+      <div class="section-head">
+        <h2>加油记录</h2>
+        <span id="record-count">0 条</span>
+      </div>
+      <div class="records" id="record-list"></div>
+      <div class="section-head">
+        <button class="link accent" id="records-back">← 返回概览</button>
+      </div>
+    </section>
+
+    <section class="view" id="view-detail" hidden>
+      <div class="nav-title">
+        <button class="text-btn" id="detail-back">〈 返回</button>
+        <h1>记录详情</h1>
+        <button class="text-btn" id="detail-edit">编辑</button>
+      </div>
+      <div class="hero" id="detail-hero"></div>
+      <div id="detail-groups" style="margin-top:14px"></div>
+    </section>
+
+    <section class="view" id="view-form" hidden>
+      <form id="record-form">
+        <div class="nav-title">
+          <button class="text-btn muted" type="button" id="form-cancel">取消</button>
+          <h1 id="form-title">新增加油</h1>
+          <button class="text-btn" type="submit">保存</button>
+        </div>
+        <div class="group">
+          <div class="field"><label>加油时间</label><input name="time" type="datetime-local" required /></div>
+          <div class="field"><label>仪表盘里程</label><input name="odometer" type="number" inputmode="decimal" step="1" min="0" placeholder="公里数" required /></div>
+          <div class="field"><label>实际花费</label><input name="cost" type="number" inputmode="decimal" step="0.01" min="0" placeholder="元" /></div>
+          <div class="field"><label>油费单价</label><input name="price" type="number" inputmode="decimal" step="0.01" min="0" placeholder="元/升" /></div>
+          <div class="field"><label>加油量</label><input name="liters" type="number" inputmode="decimal" step="0.01" min="0" placeholder="升" /></div>
+          <div class="field">
+            <label>油号</label>
+            <select name="grade">
+              <option>92#</option>
+              <option>95#</option>
+              <option>98#</option>
+              <option>0#柴油</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>是否加满</label>
+            <button type="button" class="toggle on" data-toggle="full" data-on="1"><i></i></button>
+          </div>
+          <div class="field"><label>加油站</label><input name="station" type="text" placeholder="可选" /></div>
+        </div>
+        <div class="group">
+          <div class="row"><div class="left">距上次行驶</div><div class="right" id="computed-distance">—</div></div>
+          <div class="row"><div class="left">单次油耗</div><div class="right accent" id="computed-cons">—</div></div>
+        </div>
+        <p class="hint-box">填写花费和单价后会自动算出加油量。行驶里程与单次油耗根据上次加油的仪表盘里程自动计算。</p>
+      </form>
+    </section>
+    <button class="fab" id="fab" aria-label="新增加油"></button>
+    <nav class="tabbar" id="tabbar" aria-label="主导航"></nav>
+  </div>
+
+  <div class="sheet-mask" id="mask"></div>
+  <aside class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <span></span>
+      <h2>设置</h2>
+      <button class="text-btn" id="sheet-done">完成</button>
+    </div>
+
+    <div class="section-head"><h2 style="font-size:13px;color:var(--muted);font-weight:600">车辆信息</h2></div>
+    <div class="group">
+      <div class="field"><label>车型</label><input id="veh-name" type="text" /></div>
+      <div class="field"><label>配置</label><input id="veh-spec" type="text" /></div>
+      <div class="field"><label>车牌</label><input id="veh-plate" type="text" /></div>
+    </div>
+
+    <div class="section-head"><h2 style="font-size:13px;color:var(--muted);font-weight:600">界面风格</h2></div>
+    <div class="group">
+      <button type="button" class="row clickable" data-theme-opt="dash-dark"><span class="left">仪表盘深色</span><span class="check"></span></button>
+      <button type="button" class="row clickable" data-theme-opt="dash-light"><span class="left">仪表盘浅色</span><span class="check"></span></button>
+      <button type="button" class="row clickable" data-theme-opt="minimal"><span class="left">极简浅色</span><span class="check"></span></button>
+    </div>
+
+    <div class="section-head"><h2 style="font-size:13px;color:var(--muted);font-weight:600">强调色</h2></div>
+    <div class="group">
+      <div class="colors">
+        <button class="swatch active" data-accent="blue"><div class="dot blue"></div>蓝</button>
+        <button class="swatch" data-accent="green"><div class="dot green"></div>绿</button>
+        <button class="swatch" data-accent="orange"><div class="dot orange"></div>橙</button>
+      </div>
+    </div>
+
+    <div class="section-head"><h2 style="font-size:13px;color:var(--muted);font-weight:600">数据管理</h2></div>
+    <div class="group">
+      <button type="button" class="row clickable" id="export-xlsx">
+        <span class="left"><span>导出 Excel 表格<span class="sub">.xlsx，Excel / WPS / Numbers 可直接打开</span></span></span>
+        <span class="chev">›</span>
+      </button>
+      <button type="button" class="row clickable" id="export-json">
+        <span class="left"><span>导出 JSON 备份<span class="sub">完整备份，可用于恢复全部数据</span></span></span>
+        <span class="chev">›</span>
+      </button>
+      <button type="button" class="row clickable" id="import-file">
+        <span class="left"><span>从文件恢复数据<span class="sub">支持 .xlsx / .csv / .json，含小熊油耗导出表</span></span></span>
+        <span class="chev">›</span>
+      </button>
+      <button type="button" class="row clickable" id="clear-data">
+        <span class="left" style="color:var(--danger)"><span>清空所有记录<span class="sub">需要二次确认，清空后无法恢复</span></span></span>
+        <span class="chev">›</span>
+      </button>
+    </div>
+    <p class="hint-box">数据存储在浏览器本地，清除网站数据会丢失。建议定期“导出 Excel 表格”或“导出 JSON 备份”。导入会替换全部记录，车辆信息与设置保留。</p>
+    <input id="file-data" type="file" accept=".xlsx,.xlsm,.csv,.json,application/json,text/csv" hidden />
+  </aside>
+
+  <script src="xlsx.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
